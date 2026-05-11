@@ -35,8 +35,8 @@ cp -r hermes-agent-auto-model-switch ~/.hermes/plugins/auto-model-switch
 直接告诉 AI：
 
 ```
-给 deepseek-v4-flash 设日限额 200 万 token，用完切 LongCat-Flash-Chat
-给 LongCat-Flash-Chat 设月限额 5000 万 token，用完切 LongCat-Flash-Lite
+给 claude-opus-4.6 设日限额 200 万 token，用完切 deepseek-v4-pro
+给 deepseek-v4-pro 设月限额 5000 万 token，用完切 deepseek-v4-flash
 ```
 
 ### 查看状态
@@ -48,7 +48,7 @@ cp -r hermes-agent-auto-model-switch ~/.hermes/plugins/auto-model-switch
 ### 重置用量
 
 ```
-重置 deepseek-v4-flash 的用量
+重置  claude-opus-4.6 的用量
 ```
 
 ### 手动切换
