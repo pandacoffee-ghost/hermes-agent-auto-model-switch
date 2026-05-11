@@ -1,6 +1,19 @@
 # Auto Model Switch Plugin for Hermes Agent
 
-> Hermes Agent 目前不支持在对话中自动切换模型。本插件通过钩子系统实现了这一能力：根据内容类型和用量额度，在对话不中断的情况下自动切换模型。
+> Hermes Agent 目前不支持基于 token 预算的自动模型切换。本插件通过钩子系统实现了这一能力：根据 token 用量额度和内容类型，在对话不中断的情况下自动切换模型。
+
+## 谁需要这个插件？
+
+本插件适合**同时使用多个按 token 计费的 provider，想精细控制每个模型花费上限**的用户。
+
+典型场景：
+- DeepSeek 免费额度每日有限，用完自动切到 LongCat 或 OpenRouter
+- 用便宜的文本模型做主力，发图片时自动临时切到 vision 模型
+- 多个 provider 之间设置级联降级预算
+
+**不适合的场景：**
+- Kimi Coding Plan、MiniMax 等按调用次数/小时限制的方案 — 这类限制触发 429 后，Hermes 官方的 `fallback_providers` 已能处理
+- 包月不限量的用户 — 不需要额度管理
 
 ## 功能
 
