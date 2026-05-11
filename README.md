@@ -1,134 +1,128 @@
-# Auto Model Switch Plugin
+# Auto Model Switch Plugin for Hermes Agent
 
-## English
+> Hermes Agent 目前不支持在对话中自动切换模型。本插件通过钩子系统实现了这一能力：根据内容类型和用量额度，在对话不中断的情况下自动切换模型。
 
-### Overview
-Automatically switches models mid-conversation without interruption. Two core features:
-1. **Content-aware routing** — detects images/audio/video in your message and switches to a capable model if the current one doesn't support it. Switches back after 2 consecutive text-only turns.
-2. **Quota enforcement** — set token budgets (daily/weekly/monthly/total) per model. When exceeded, automatically falls back to the next model in the chain.
+## 功能
 
-### How It Works (Default Behavior)
-- **The plugin does NOT change your default model.** Whatever model you have configured in Hermes (`/model` or `config.yaml`) remains your primary model.
-- The plugin only intervenes in two cases:
-  1. You send multimedia content that your current model can't handle
-  2. A model's configured quota is exhausted
-- If you have no quotas configured, the plugin is passive — it only activates for content-type switching.
+- **额度管控** — 为模型设置 token 预算（日/周/月/总限额），超额后自动切换到 fallback 模型
+- **内容感知路由** — 检测到图片/音频但当前模型不支持时，自动切换到支持的模型
+- **智能回切** — 多媒体处理完毕后，连续 2 轮纯文本自动切回原模型
+- **多级 Fallback 链** — 支持 A→B→C 级联降级
+- **对话不中断** — 切换在同一 Agent 实例上原地进行，历史完整保留
 
-### Manual `/model` Switching
-- **Fully compatible.** You can use `/model` at any time to switch models manually.
-- Manual switches override the plugin's state — if you manually switch, the plugin treats the new model as your "current" model going forward.
-- The plugin will NOT fight your manual switches or switch you back unexpectedly.
-- Quota tracking still applies to whatever model is active.
+## 安装
 
-### Setup
-1. Copy this plugin to `~/.hermes/plugins/auto-model-switch/` (or add the path to `plugins.enabled` in config.yaml)
-2. Restart Hermes
-3. On first session, the plugin will prompt you to configure quotas (optional)
+```bash
+# 方式一：复制到 Hermes 插件目录
+cp -r hermes-agent-auto-model-switch ~/.hermes/plugins/auto-model-switch
 
-### Quota Configuration (via conversation)
-Tell the agent:
-- "Set a daily quota of 2M tokens for deepseek-v4-flash, fallback to LongCat-Flash-Chat"
-- "Set a monthly quota of 50M tokens for LongCat-Flash-Chat"
-- "Show quota status"
-- "Reset usage for deepseek-v4-flash"
+# 方式二：在 config.yaml 中指定路径
+# plugins:
+#   enabled:
+#   - /path/to/hermes-agent-auto-model-switch
+```
 
-### Quota Periods
-| Period | Resets |
-|--------|--------|
-| daily | Every day at 00:00 |
-| weekly | Every Monday at 00:00 |
-| monthly | 1st of each month |
-| total | Never (lifetime budget) |
+重启 Hermes，输入 `/plugins` 确认加载：
 
-A model can have multiple periods stacked. Any single period exceeding triggers the switch.
+```
+✓ auto-model-switch v2.0.0 (3 tools, 3 hooks)
+```
 
-### Content-Type Switching Behavior
-| Detected content | Action |
-|-----------------|--------|
-| Image (image_url, input_image) | Switch to vision model if current doesn't support |
-| Audio (input_audio) | Switch to audio model if current doesn't support |
-| Text only (after content switch) | Count turns; switch back after 2 consecutive text turns |
-| Text only (normal) | No action |
+## 使用
 
-### Tools Provided
-- `model_quota_status` — view all quotas and usage
-- `model_quota_set` — set/update a quota (model, period, max_tokens, fallback)
-- `model_quota_reset` — reset usage counters for a model
+### 设置额度（通过对话）
 
----
-
-## 中文说明
-
-### 概述
-在对话不中断的情况下自动切换模型。两个核心功能：
-1. **内容感知路由** — 检测到消息中包含图片/音频/视频，且当前模型不支持时，自动切换到支持的模型。连续 2 轮纯文本后自动切回。
-2. **额度管控** — 为模型设置 token 预算（日/周/月/总限额），超额后自动切换到 fallback 模型。
-
-### 默认行为（重要）
-- **插件不会改变你的默认模型。** 你在 Hermes 中配置的模型（通过 `/model` 或 `config.yaml`）始终是你的主模型。
-- 插件只在两种情况下介入：
-  1. 你发送了当前模型不支持的多媒体内容（图片/音频）
-  2. 当前模型的配额用完了
-- 如果你没有配置任何额度，插件几乎是透明的——只在内容类型不匹配时才会切换。
-
-### 手动 `/model` 切换是否受影响？
-- **完全不受影响。** 你随时可以用 `/model` 手动切换模型。
-- 手动切换会覆盖插件状态——插件会把你手动选择的模型当作新的"当前模型"。
-- 插件不会与你的手动操作冲突，不会把你意外切回去。
-- 额度追踪仍然对当前活跃的模型生效。
-
-### 安装
-1. 将此插件复制到 `~/.hermes/plugins/auto-model-switch/`，或在 config.yaml 的 `plugins.enabled` 中添加插件路径
-2. 重启 Hermes
-3. 首次会话时，插件会提示你配置额度（可选，不配也行）
-
-### 额度配置（通过对话）
 直接告诉 AI：
-- "给 deepseek-v4-flash 设日限额 200 万 token，用完切 LongCat-Flash-Chat"
-- "给 LongCat-Flash-Chat 设月限额 5000 万 token"
-- "查看模型额度状态"
-- "重置 deepseek-v4-flash 的用量"
 
-### 额度周期
-| 周期 | 重置时间 |
-|------|---------|
-| daily（日限额） | 每天 00:00 自动重置 |
-| weekly（周限额） | 每周一 00:00 自动重置 |
-| monthly（月限额） | 每月 1 号自动重置 |
-| total（总限额） | 永不重置，用完为止 |
-
-同一模型可以叠加多个周期限额，任一周期超额即触发切换。
-
-### 内容类型切换逻辑
-| 检测到的内容 | 动作 |
-|-------------|------|
-| 图片（image_url, input_image） | 当前模型不支持 vision → 切到 vision 模型 |
-| 音频（input_audio） | 当前模型不支持 audio → 切到 audio 模型 |
-| 纯文本（之前因内容切换过） | 计数，连续 2 轮纯文本 → 切回原模型 |
-| 纯文本（正常状态） | 不做任何操作 |
-
-### 多级 Fallback 链
 ```
-deepseek-v4-flash (日限 200万)
-  → 用完 → LongCat-Flash-Chat (月限 5000万)
-    → 用完 → 通知用户所有模型额度耗尽
+给 deepseek-v4-flash 设日限额 200 万 token，用完切 LongCat-Flash-Chat
+给 LongCat-Flash-Chat 设月限额 5000 万 token，用完切 LongCat-Flash-Lite
 ```
 
-### 提供的工具
-- `model_quota_status` — 查看所有模型额度和用量
-- `model_quota_set` — 设置/更新额度（模型、周期、最大 token 数、fallback）
-- `model_quota_reset` — 重置指定模型的用量计数器
+### 查看状态
 
-### 常见问题
+```
+查看模型额度状态
+```
+
+### 重置用量
+
+```
+重置 deepseek-v4-flash 的用量
+```
+
+### 手动切换
+
+`/model` 命令随时可用，不受插件影响。手动切换后插件会以新模型为基准继续工作。
+
+## 额度周期
+
+| 周期 | 重置时间 | 示例 |
+|------|---------|------|
+| `daily` | 每天 00:00 | 免费 API 日限额 |
+| `weekly` | 每周一 00:00 | 周预算控制 |
+| `monthly` | 每月 1 号 | 付费 API 月度预算 |
+| `total` | 永不重置 | 一次性额度 |
+
+同一模型可叠加多个周期，任一超额即触发切换。
+
+## 切换通知
+
+当自动切换发生时：
+- 终端显示 `⚡ Auto-switch: modelA → modelB (provider)`
+- 左下角状态栏立即更新为当前模型
+- LLM 会意识到模型已切换并相应调整
+
+## 默认行为
+
+- **不改变你的默认模型** — 安装前用什么模型，安装后还是什么模型
+- **不修改 config.yaml** — 零侵入
+- **不配额度也有用** — 仍会在内容类型不匹配时自动切换
+
+## 插件结构
+
+```
+auto-model-switch/
+├── plugin.yaml      # 清单：声明 hooks 和 tools
+├── __init__.py      # register(ctx) 入口
+├── detector.py      # 内容类型检测（image_url/input_audio）
+├── quota.py         # 额度管理（多周期、持久化）
+├── switcher.py      # 模型切换（调用 Hermes 内部 API）
+├── hooks.py         # 钩子逻辑（pre_llm_call / post_api_request）
+├── schemas.py       # 工具 schema（LLM 可见）
+├── tools.py         # 工具 handler
+├── skill.md         # 技能描述
+└── data/
+    └── quotas.json  # 运行时数据（.gitignore）
+```
+
+## 技术原理
+
+本插件利用 Hermes 的插件钩子系统：
+
+- **`pre_llm_call`** — 每轮 LLM 调用前触发，检测内容类型 + 检查额度，必要时调用 `agent.switch_model()` 切换
+- **`post_api_request`** — 每次 API 响应后触发，从 `usage` 字段记录真实 token 用量
+- **`on_session_start`** — 新会话开始时，首次使用引导
+
+模型切换通过 `hermes_cli.model_switch.switch_model()` 解析 credentials，再调用 `agent.switch_model()` 重建 client。对话历史完整保留，因为切换的是同一个 Agent 实例。
+
+## 常见问题
 
 **Q: 安装后我的模型会变吗？**
-A: 不会。插件不修改你的 Hermes 配置，你原来用什么模型，安装后还是什么模型。
-
-**Q: 我不设置额度，插件有什么用？**
-A: 仍然有用——当你发送图片但当前模型不支持 vision 时，插件会自动临时切换到支持的模型，处理完后切回来。
+A: 不会。插件不修改配置，你原来用什么模型，安装后还是什么模型。
 
 **Q: 切换模型后对话历史会丢失吗？**
-A: 不会。切换是在同一个 Agent 实例上原地进行的，对话历史完整保留。
+A: 不会。切换在同一个 Agent 实例上原地进行，对话历史完整保留。
 
 **Q: 插件崩溃会影响 Hermes 吗？**
-A: 不会。Hermes 的插件系统会捕获所有异常，插件出错只会被跳过，不影响正常使用。
+A: 不会。Hermes 的插件系统会捕获所有异常，插件出错只会被跳过。
+
+**Q: 我不设置额度，插件有什么用？**
+A: 仍然有用——当你发送图片但当前模型不支持 vision 时，插件会自动临时切换。
+
+**Q: 手动 `/model` 切换会冲突吗？**
+A: 不会。手动切换优先级最高，插件会以新模型为基准继续工作。
+
+## License
+
+MIT
