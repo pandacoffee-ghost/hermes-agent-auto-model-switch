@@ -1,0 +1,17 @@
+name: auto-model-switch
+version: 2.0.0
+description: >
+  Auto model switching based on content type detection and usage quotas.
+  Switches to vision/audio models when multimedia is detected, enforces
+  token budgets with automatic fallback, and smart switch-back after
+  consecutive text-only turns.
+
+author: zhangkai
+provides_tools:
+  - model_quota_status
+  - model_quota_set
+  - model_quota_reset
+provides_hooks:
+  - pre_llm_call
+  - post_api_request
+  - on_session_start
