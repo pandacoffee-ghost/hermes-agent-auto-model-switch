@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .detector import detect_content_types
 from .quota import QuotaManager
-from .switcher import get_state, switch_for_content, switch_back, do_switch, reset_state
+from .switcher import get_state, switch_for_content, switch_back, do_switch, reset_state, set_current_agent_for_session
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,9 @@ def on_pre_llm_call(session_id, user_message, conversation_history,
     """
     if _quota is None:
         return None
+
+    # Help gateway mode find the agent by session_id
+    set_current_agent_for_session(session_id)
 
     notifications = []
 

@@ -146,19 +146,90 @@ def resolve_model(user_input: str) -> tuple:
 
 
 def _get_agent():
-    """Get the running agent instance via plugin manager."""
+    """Get the running agent instance via plugin manager or gateway cache.
+
+    Works in both CLI mode (_cli_ref.agent) and gateway mode
+    (_gateway_runner_ref._agent_cache lookup by session context).
+    """
+    # Try CLI mode first
     try:
         from hermes_cli.plugins import get_plugin_manager
         cli = get_plugin_manager()._cli_ref
         if cli and hasattr(cli, "agent") and cli.agent is not None:
             return cli.agent
+    except Exception:
+        pass
+
+    # Try gateway mode: find agent in cache via session context var
+    try:
+        from gateway.run import _gateway_runner_ref
+        runner = _gateway_runner_ref()
+        if runner is None:
+            return None
+        cache = getattr(runner, "_agent_cache", None)
+        lock = getattr(runner, "_agent_cache_lock", None)
+        if cache is None:
+            return None
+
+        # Get current session key from context var
+        from gateway.session_context import _SESSION_KEY
+        session_key = _SESSION_KEY.get(None)
+        if session_key and session_key != "":
+            if lock:
+                with lock:
+                    entry = cache.get(session_key)
+            else:
+                entry = cache.get(session_key)
+            if entry and entry[0] is not None:
+                return entry[0]
+
+        # Fallback: search by session_id (passed to hook via kwargs)
+        # This is set by _find_agent_by_session_id below
+        if _current_session_agent:
+            return _current_session_agent
     except Exception as e:
-        logger.debug("Cannot get agent: %s", e)
+        logger.debug("Gateway agent lookup failed: %s", e)
+
     return None
 
 
+# Thread-local-ish storage for gateway mode agent lookup
+_current_session_agent = None
+
+
+def set_current_agent_for_session(session_id: str):
+    """Called from hooks to help locate the agent in gateway mode.
+
+    In gateway mode, we search the agent cache for the agent with
+    matching session_id.
+    """
+    global _current_session_agent
+    try:
+        from gateway.run import _gateway_runner_ref
+        runner = _gateway_runner_ref()
+        if runner is None:
+            return
+        cache = getattr(runner, "_agent_cache", None)
+        lock = getattr(runner, "_agent_cache_lock", None)
+        if cache is None:
+            return
+        if lock:
+            with lock:
+                for key, entry in cache.items():
+                    if entry and entry[0] and getattr(entry[0], "session_id", None) == session_id:
+                        _current_session_agent = entry[0]
+                        return
+        else:
+            for key, entry in cache.items():
+                if entry and entry[0] and getattr(entry[0], "session_id", None) == session_id:
+                    _current_session_agent = entry[0]
+                    return
+    except Exception:
+        pass
+
+
 def _get_cli():
-    """Get the CLI instance."""
+    """Get the CLI instance (None in gateway mode)."""
     try:
         from hermes_cli.plugins import get_plugin_manager
         return get_plugin_manager()._cli_ref
@@ -254,13 +325,42 @@ def do_switch(model: str, provider: str = "") -> bool:
                 f"via {result.provider_label or result.target_provider}. "
                 f"Adjust your self-identification accordingly.]"
             )
+        else:
+            # Gateway mode: persist override so next turn uses the new model
+            try:
+                from gateway.run import _gateway_runner_ref
+                from gateway.session_context import _SESSION_KEY
+                runner = _gateway_runner_ref()
+                session_key = _SESSION_KEY.get(None)
+                if runner and session_key:
+                    overrides = getattr(runner, "_session_model_overrides", {})
+                    overrides[session_key] = {
+                        "model": result.new_model,
+                        "provider": result.target_provider,
+                        "api_key": result.api_key,
+                        "base_url": result.base_url,
+                        "api_mode": result.api_mode,
+                    }
+                    # Also set pending note for gateway
+                    notes = getattr(runner, "_pending_model_notes", None)
+                    if notes is None:
+                        runner._pending_model_notes = {}
+                        notes = runner._pending_model_notes
+                    notes[session_key] = (
+                        f"[Note: model was just auto-switched from {old_model} to {result.new_model} "
+                        f"via {result.provider_label or result.target_provider}. "
+                        f"Adjust your self-identification accordingly.]"
+                    )
+            except Exception as e:
+                logger.debug("Gateway override failed (non-critical): %s", e)
 
-        # Print visible notification to terminal so user sees it immediately
-        try:
-            from hermes_cli.banner import cprint as _cprint
-            _cprint(f"  ⚡ Auto-switch: {old_model} → {result.new_model} ({result.provider_label or result.target_provider})")
-        except Exception:
-            print(f"  ⚡ Auto-switch: {old_model} → {result.new_model} ({result.provider_label or result.target_provider})")
+        # Print visible notification to terminal (CLI only, no-op in gateway)
+        if cli:
+            try:
+                from hermes_cli.banner import cprint as _cprint
+                _cprint(f"  ⚡ Auto-switch: {old_model} → {result.new_model} ({result.provider_label or result.target_provider})")
+            except Exception:
+                pass
 
         logger.info("Switched to %s (%s) successfully", result.new_model, result.target_provider)
         return True
