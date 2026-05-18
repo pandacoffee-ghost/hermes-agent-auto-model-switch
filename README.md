@@ -7,7 +7,7 @@
 本插件适合**同时使用多个按 token 计费的 provider，想精细控制每个模型花费上限**的用户。
 
 典型场景：
-- DeepSeek 免费额度每日有限，用完自动切到 LongCat 或 OpenRouter
+- DeepSeek 免费额度每日有限，用完自动切到 OpenRouter
 - 用便宜的文本模型做主力，发图片时自动临时切到 vision 模型
 - 多个 provider 之间设置级联降级预算
 
